@@ -3,6 +3,7 @@
   system ? builtins.currentSystem,
 }:
 let
+  templet = pkgs.callPackage ./templet.nix { };
   shell = pkgs.mkShell {
     packages = with pkgs; [
       npins
@@ -16,4 +17,5 @@ let
 in
 {
   inherit shell;
+  inherit (templet) cli default;
 }
