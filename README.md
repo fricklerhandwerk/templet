@@ -1,25 +1,19 @@
-# templet
+# `templet`
 
 Templates, from Nix, for Nix.
 Using [npins](https://github.com/andir/npins), because that works.
 
 ## What it does
 
-`templet` creates a very simple `default.nix` and an accompanying `shell.nix`, where dependencies are pinned with `npins`.
+`templet shell` creates a very simple `default.nix` and an accompanying `shell.nix`, where dependencies are pinned with `npins`.
 It takes initial packages to include from the command line, and always adds `npins` for convience.
-
-## How it works
-
-`temple` builds the initial files as a Nix derivation, copies them to the current directory, and runs `npins` to fetch the desired version of Nixpkgs (default: `nixpkgs-unstable`).
-
-From there, modify `default.nix` and manage remote sources with `npins` as usual.
 
 ## How to use it
 
 Create an environment with packages from Nixpkgs in the current directory:
 
 ```
-templet shell --packages cowsay lolcat --nixpkgs nixpkgs-23.11
+templet shell --packages cowsay lolcat -- --branch nixpkgs-23.11
 ```
 
 This will produce the following files:
@@ -64,6 +58,12 @@ in
 }:
 (import ./. { inherit sources system; }).shell
 ```
+
+## How it works
+
+`templet` builds the initial files as a Nix derivation, copies them to the current directory, and runs `npins` to fetch the desired version of Nixpkgs (default: `nixpkgs-unstable`).
+
+From there, modify `default.nix` and manage remote sources with `npins` as usual.
 
 ## Why it exists
 

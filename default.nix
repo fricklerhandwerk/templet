@@ -6,6 +6,7 @@ let
   templet = pkgs.callPackage ./templet.nix { };
   shell = pkgs.mkShell {
     packages = with pkgs; [
+      templet.cli
       npins
     ];
   };

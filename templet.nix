@@ -1,16 +1,8 @@
-{ pkgs, npins, nix }:
-let
-  lib = pkgs.lib;
-in
+{ lib, findutils, gnused, npins, nix, writeShellApplication }:
 rec {
-  cli = pkgs.writeShellApplication {
+  cli = writeShellApplication {
     name = "templet";
-    # `nix` is not in there deliberately.
-    # it wouldn't be safe to run a build if the Nix from Nixpkgs is newer than
-    # the one in the user's environment, as that may change the local store
-    # database schema, which will produce obscure errors when accessed with the
-    # older Nix again.
-    runtimeInputs = [ npins ];
+    runtimeInputs = [ npins nix findutils gnused ];
     text = ''
       packages=()
 
@@ -18,9 +10,10 @@ rec {
         echo "Usage:"
         echo "templet shell -p [package name]... [-- [npins arguments]]"
         echo
-        echo "-p / --packages : List of Nixpkgs derivations"
+        echo "-p / --packages : List of Nixpkgs packages"
         echo "--              : All following arguments are passed to"
         echo "                  'npins add github nixos nixpkgs'"
+        echo "                  If not specified: '--branch nixpkgs-unstable'"
       }
 
       while [[ $# -gt 0 ]]; do
@@ -31,7 +24,7 @@ rec {
               case $1 in
                 -p|--packages)
                   shift
-                  while [[ $# -gt 0 && $1 =~ ^[a-z] ]]; do
+                  while [[ $# -gt 0 && $1 =~ ^[a-zA-Z_] ]]; do
                     packages+=("$1")
                     shift
                   done
@@ -61,38 +54,44 @@ rec {
         exit 1
       done
 
-      result=$(nix-build ${./.} -A default --no-out-link --argstr packages "''${packages[*]}")
-      cp "$result" default.nix
-      cp ${./shell.nix} shell.nix
+      tmp="$(mktemp -d)"
+      pushd "$tmp"
+
       npins init --bare
-      echo "$@"
-      npins add github nixos nixpkgs "$@"
+      if [[ $# -gt 0 ]]; then
+        npins add github nixos nixpkgs "$@"
+      else
+        npins add github nixos nixpkgs --branch nixpkgs-unstable
+      fi
+      result=$(nix-instantiate --eval ${./.} -A default --argstr packages "''${packages[*]}")
+      # unquote
+      result="''${result%\"*}"
+      result="''${result#\"*}"
+      printf "%b" "$result" > default.nix
+      install -m 644 ${./src/shell.nix} shell.nix
+
+      popd
+
+      source_dir="$tmp"
+      target_dir="$(pwd)"
+      source_files=$(find "$source_dir" -type f | sed "s|^$source_dir/||" | sort)
+      target_files=$(find "$target_dir" -type f | sed "s|^$target_dir/||" | sort)
+      existing=$(comm -12 <(echo "$source_files") <(echo "$target_files"))
+      if [[ -n "$existing" ]]; then
+        echo "Aborting, some target files already exist:"
+        echo "$existing"
+        exit 1
+      fi
+
+      mv "$tmp"/* .
     '';
   };
-  default = { packages }: pkgs.writeText "default.nix" ''
-    {
-      sources ? import ./npins,
-      system ? builtins.currentSystem,
-    }:
+  default = { packages }:
+    with lib;
     let
-      shell = pkgs.mkShell {
-        packages = with pkgs; [
-          ${
-            # yes, this is a hack
-            lib.concatStringsSep "\n      "
-            (lib.strings.splitString " " packages)
-          }
-          npins
-        ];
-      };
-      pkgs = import sources.nixpkgs {
-        inherit system;
-        config = { };
-        overlays = [ ];
-      };
+      npins = [ "      npins" ];
+      template = readFile ./src/default.nix;
+      replacement = concatStringsSep "\n      " (npins ++ (if packages != "" then splitString " " packages else [ ]));
     in
-    {
-      inherit shell;
-    }
-  '';
+    replaceStrings npins [ replacement ] template;
 }
